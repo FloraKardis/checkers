@@ -1,0 +1,95 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=4
+
+_global_script_classes=[ {
+"base": "Node2D",
+"class": "BoardInterface",
+"language": "GDScript",
+"path": "res://BoardInterface.gd"
+}, {
+"base": "Control",
+"class": "CheckersAI",
+"language": "GDScript",
+"path": "res://CheckersAI.gd"
+}, {
+"base": "Control",
+"class": "Controller",
+"language": "GDScript",
+"path": "res://Controller.gd"
+}, {
+"base": "Control",
+"class": "History",
+"language": "GDScript",
+"path": "res://History.gd"
+}, {
+"base": "Node2D",
+"class": "HistoryInterface",
+"language": "GDScript",
+"path": "res://HistoryInterface.gd"
+}, {
+"base": "Control",
+"class": "Interface",
+"language": "GDScript",
+"path": "res://Interface.gd"
+}, {
+"base": "Area2D",
+"class": "InterfaceButton",
+"language": "GDScript",
+"path": "res://Button.gd"
+}, {
+"base": "Node2D",
+"class": "SquareInterface",
+"language": "GDScript",
+"path": "res://SquareInterface.gd"
+}, {
+"base": "Area2D",
+"class": "StoneInterface",
+"language": "GDScript",
+"path": "res://StoneInterface.gd"
+} ]
+_global_script_class_icons={
+"BoardInterface": "",
+"CheckersAI": "",
+"Controller": "",
+"History": "",
+"HistoryInterface": "",
+"Interface": "",
+"InterfaceButton": "",
+"SquareInterface": "",
+"StoneInterface": ""
+}
+
+[application]
+
+config/name="Checkers"
+run/main_scene="res://MainScene.tscn"
+config/icon="res://icon.png"
+
+[display]
+
+window/size/width=600
+window/size/height=800
+window/handheld/orientation="portrait"
+window/stretch/mode="2d"
+window/stretch/aspect="keep"
+
+[input]
+
+left_click={
+"deadzone": 0.5,
+"events": [ Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":0,"alt":false,"shift":false,"control":false,"meta":false,"command":false,"button_mask":0,"position":Vector2( 0, 0 ),"global_position":Vector2( 0, 0 ),"factor":1.0,"button_index":1,"pressed":false,"doubleclick":false,"script":null)
+ ]
+}
+
+[rendering]
+
+quality/driver/driver_name="GLES2"
+environment/default_clear_color=Color( 0, 0, 0, 1 )
+environment/default_environment="res://default_env.tres"

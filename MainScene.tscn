@@ -1,0 +1,18 @@
+[gd_scene load_steps=5 format=2]
+
+[ext_resource path="res://MainScene.gd" type="Script" id=1]
+[ext_resource path="res://Interface.tscn" type="PackedScene" id=2]
+[ext_resource path="res://Controller.tscn" type="PackedScene" id=3]
+[ext_resource path="res://CheckersAI.tscn" type="PackedScene" id=4]
+
+[node name="MainScene" type="Control"]
+script = ExtResource( 1 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Controller" parent="." instance=ExtResource( 3 )]
+
+[node name="Interface" parent="." instance=ExtResource( 2 )]
+
+[node name="CheckersAI" parent="." instance=ExtResource( 4 )]
