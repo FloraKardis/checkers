@@ -4,32 +4,31 @@ class_name StoneInterface
 
 onready var sprite : Sprite = get_node("Sprite")
 var board_interface # : BoardInterface
-var properties : Controller.Stone
+var square_number : int
 var restart : bool
 
 
-func initialize(new_stone : Controller.Stone, interface):
-	properties = new_stone
+func initialize(new_number, interface):
 	board_interface = interface
+	square_number = new_number
 	set_sprite()
-	position = board_interface.calculate_on_screen_position(properties.square_number)
+	position = board_interface.calculate_on_screen_position(square_number)
 	restart = false
 
 func set_sprite():
-	if properties.type == Controller.stone_type.man:
-		if properties.color == Controller.stone_color.black:
-			sprite.texture = load("res://Sprites/stone_black.png")
-		if properties.color == Controller.stone_color.white:
-			sprite.texture = load("res://Sprites/stone_white.png")
-	if properties.type == Controller.stone_type.king:
-		if properties.color == Controller.stone_color.black:
-			sprite.texture = load("res://Sprites/king_black.png")
-		if properties.color == Controller.stone_color.white:
-			sprite.texture = load("res://Sprites/king_white.png")
+	var field = board_interface.controller.current_state.board[square_number]
+	if field == Controller.field.black_man:
+		sprite.texture = load("res://Sprites/stone_black.png")
+	if field == Controller.field.white_man:
+		sprite.texture = load("res://Sprites/stone_white.png")
+	if field == Controller.field.black_king:
+		sprite.texture = load("res://Sprites/king_black.png")
+	if field == Controller.field.white_king:
+		sprite.texture = load("res://Sprites/king_white.png")
 	scale = Vector2(0, 0)
 
-func set_square(square_number : int):
-	properties.square_number = square_number
+func set_square(number : int):
+	square_number = number
 
 # DRAG'N'DROP
 
@@ -46,17 +45,18 @@ func _input_event(viewport, event, shape_idx):
 				if event.pressed:
 					picked_up = true
 					z_index = 1
-					square_to = properties.square_number
+					square_to = square_number
 				else:
 					send_try_move()
 
 func is_pickable():
-	return properties.color == board_interface.user_color
+	var controller = board_interface.controller
+	return controller.color(controller.current_state, square_number) == board_interface.user_color
 
 func send_try_move():
 	picked_up = false
 	z_index = 0
-	board_interface.try_move(Controller.Move.new(properties, square_to), self)
+	board_interface.try_move(Controller.Move.new(square_number, square_to), self)
 
 # ANIMATION
 

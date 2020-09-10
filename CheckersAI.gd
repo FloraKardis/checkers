@@ -15,7 +15,7 @@ class MCTS_Node:
 
 
 var controller 
-var number_of_iterations = 25 # 1000 is good enough
+var number_of_iterations = 50 # 1000 is good enough
 var ai_player = Controller.stone_color.white
 
 
@@ -28,14 +28,11 @@ func propose_move() -> Controller.Move:
 	return propose_move_mcts()
 
 func propose_move_simple() -> Controller.Move:
-	for possible_move in controller.possible_moves(controller.state_current()):
-		if controller.is_correct_move(controller.state_current(), possible_move):
-			return possible_move
-	return null # Error, should not happen
+	return controller.possible_moves(controller.current_state)[0]
 
 func propose_move_mcts() -> Controller.Move:
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
-	var root : MCTS_Node = MCTS_Node.new(controller.state_current(), null)
+	var root : MCTS_Node = MCTS_Node.new(controller.current_state, null)
 	if len(controller.possible_moves(root.state)) == 1:
 		return select_best(root)
 	for iteration in number_of_iterations:
@@ -118,4 +115,4 @@ func select_best(root) -> Controller.Move:
 	for child_index in len(root.children):
 		if root.children[child_index].visits > root.children[best_index].visits:
 			best_index = child_index
-	return controller.possible_moves(controller.state_current())[best_index]
+	return controller.possible_moves(controller.current_state)[best_index]

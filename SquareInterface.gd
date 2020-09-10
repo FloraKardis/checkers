@@ -37,7 +37,7 @@ func _on_SquareInterface_mouse_entered():
 func _on_SquareInterface_mouse_exited():
 	mouse_in = false
 	if stone_over != null:
-		stone_over.square_to = stone_over.properties.square_number
+		stone_over.square_to = stone_over.square_number
 
 func try_set_square():
 	if mouse_in and stone_over != null:

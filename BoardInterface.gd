@@ -31,9 +31,9 @@ func set_stones(animate):
 	for stone in stones:
 		stone.queue_free()
 	stones.clear()
-	for stone in controller.state_current().board:
-		if stone != null:
-			put_stone(stone, animate)
+	for square_number in controller.square_numbers:
+		if controller.current_state.board[square_number] != Controller.field.empty:
+			put_stone(square_number, animate)
 
 func check_all_put():
 	var all_put = true
@@ -46,15 +46,15 @@ func check_all_put():
 		reset()
 
 func set_user_color():
-	if controller.state_current().player in interface_users:
-		user_color = controller.state_current().player
+	if controller.current_state.player in interface_users:
+		user_color = controller.current_state.player
 	else:
 		user_color = null
 
 func reset():
 	set_stones(false)
 	set_user_color()
-	if not controller.state_current().player in interface_users:
+	if not controller.current_state.player in interface_users:
 		buttons.animate_lock()
 		if reverted_change != null:
 			revert(controller.history.undo())
@@ -62,19 +62,19 @@ func reset():
 			redo(controller.history.redo())
 		else:
 			paused_function = pausable_functions.propose_move
-			pause = 0.5
+			pause = 0.6
 	else:
 		reverted_change = null
 		redone_change = null
 		buttons.animate_unlock()
 
-func put_stone(stone : Controller.Stone, animate : bool):
+func put_stone(square_number : int, animate : bool):
 	var new_stone = load("res://StoneInterface.tscn").instance()
 	add_child(new_stone)
 	stones.append(new_stone)
-	new_stone.initialize(stone, self)
+	new_stone.initialize(square_number, self)
 	if animate:
-		new_stone.animate_put(stone.square_number)
+		new_stone.animate_put(square_number)
 	else:
 		new_stone.scale = Vector2(1, 1)
 
@@ -95,17 +95,18 @@ var promoted_stone : StoneInterface
 var winner = null # : Controller.stone_color
 
 func try_move(move : Controller.Move, stone_interface):
-	if controller.is_correct_move(controller.state_current(), move):
+	if controller.is_correct_move(controller.current_state, move):
 		var change : Controller.Change = controller.make_move(move)
 		stone_interface.move_to(get_node("Square" + String(move.to)).position)
 		stone_interface.set_square(move.to)
 		if change.captured != null:
-			captured_stone = find_stone(change.captured.square_number)
+			captured_stone = find_stone(change.captured)
 		if change.promoted:
 			promoted_stone = find_stone(move.to)
 		winner = change.winner
+	else:
+		stone_interface.move_to(get_node("Square" + String(move.from)).position)
 	user_color = null
-	stone_interface.move_to(get_node("Square" + String(move.stone.square_number)).position)
 
 var reverted_change : Controller.Change = null
 var redone_change : Controller.Change = null
@@ -116,22 +117,22 @@ func revert(change : Controller.Change):
 	controller.revert(change)
 	reverted_change = change
 	user_color = change.state_old.player
-	moved_stone.move_to(get_node("Square" + String(change.move.stone.square_number)).position)
+	moved_stone.move_to(get_node("Square" + String(change.move.from)).position)
 
 func redo(change : Controller.Change):
-	moved_stone = find_stone(change.move.stone.square_number)
+	moved_stone = find_stone(change.move.from)
 	controller.redo(change)
 	redone_change = change
 	user_color = change.state_new.player
 	if change.captured != null:
-		captured_stone = find_stone(change.captured.square_number)
+		captured_stone = find_stone(change.captured)
 	if change.promoted:
 		promoted_stone = moved_stone
 	moved_stone.move_to(get_node("Square" + String(change.move.to)).position)
 
 func find_stone(square_number : int): # this is ugly, but I can't be bothered
 	for stone in stones:
-		if stone.properties.square_number == square_number:
+		if stone.square_number == square_number:
 			return stone
 
 var game_over : bool = false
@@ -167,7 +168,7 @@ func capture_finished():
 					reset()
 		else:
 			if reverted_change.promoted:
-				moved_stone.properties.type = Controller.stone_type.man
+#				moved_stone.properties.type = Controller.stone_type.man # TODO this might be important
 				moved_stone.animate_demotion()
 			elif reverted_change.captured == null:
 				promotion_finished()
@@ -185,7 +186,7 @@ var covers : Array = []
 func clear_screen():
 	game_over = true
 	for stone in stones:
-		if stone.properties.color == winner:
+		if controller.color(controller.current_state, stone.square_number) == winner:
 			stone.z_index = 3
 	for square_number in range(controller.board_size * controller.board_size):
 		var new_square = load("res://SquareInterface.tscn").instance()
@@ -209,12 +210,14 @@ func show_the_winner():
 	buttons.animate_lock()
 	buttons.hide()
 	for stone in stones:
-		if stone.properties.color == winner:
+		if controller.color(controller.current_state, stone.square_number) == winner:
 			stone.move_to(Vector2(0, 0))
 
-enum pausable_functions { show_the_winner, set_stones, propose_move, none }
+enum pausable_functions { show_the_winner, set_stones, propose_move, try_move, none }
 var pause : float
 var paused_function = pausable_functions.none
+
+var proposed_move
 
 func _process(delta):
 	if paused_function != pausable_functions.none:
@@ -222,16 +225,18 @@ func _process(delta):
 			pause -= delta
 		if pause <= 0:
 			if paused_function == pausable_functions.show_the_winner:
-				paused_function = pausable_functions.none
 				show_the_winner()
-			if paused_function == pausable_functions.set_stones:
-				paused_function = pausable_functions.none
+			elif paused_function == pausable_functions.set_stones:
 				set_stones(true)
-			if paused_function == pausable_functions.propose_move:
+			elif paused_function == pausable_functions.propose_move:
+				proposed_move = ai.propose_move()
+				paused_function = pausable_functions.try_move
+				pause = 0.4
+				return
+			elif paused_function == pausable_functions.try_move:
 				paused_function = pausable_functions.none
-				var proposed_move : Controller.Move = ai.propose_move()
-				try_move(proposed_move, find_stone(proposed_move.stone.square_number))
-#			paused_function = pausable_functions.none
+				try_move(proposed_move, find_stone(proposed_move.from))
+			paused_function = pausable_functions.none
 
 func new_game():
 	controller.reset()
