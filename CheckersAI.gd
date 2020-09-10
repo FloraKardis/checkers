@@ -15,7 +15,7 @@ class MCTS_Node:
 
 
 var controller 
-var number_of_iterations = 50 # 1000 is good enough
+var number_of_iterations = 200 # 1000 is good enough
 var ai_player = Controller.stone_color.white
 
 
@@ -24,11 +24,15 @@ func _ready():
 	pass
 
 func propose_move() -> Controller.Move:
-#	return propose_move_simple()
+#	return propose_move_first()
+#	return propose_move_random()
 	return propose_move_mcts()
 
-func propose_move_simple() -> Controller.Move:
+func propose_move_first() -> Controller.Move:
 	return controller.possible_moves(controller.current_state)[0]
+
+func propose_move_random() -> Controller.Move:
+	return controller.random_move(controller.current_state)
 
 func propose_move_mcts() -> Controller.Move:
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search

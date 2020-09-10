@@ -70,7 +70,6 @@ _global_script_class_icons={
 
 config/name="Checkers"
 run/main_scene="res://MainScene.tscn"
-config/icon="res://icon.png"
 
 [display]
 

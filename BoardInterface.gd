@@ -168,7 +168,6 @@ func capture_finished():
 					reset()
 		else:
 			if reverted_change.promoted:
-#				moved_stone.properties.type = Controller.stone_type.man # TODO this might be important
 				moved_stone.animate_demotion()
 			elif reverted_change.captured == null:
 				promotion_finished()
@@ -217,7 +216,7 @@ enum pausable_functions { show_the_winner, set_stones, propose_move, try_move, n
 var pause : float
 var paused_function = pausable_functions.none
 
-var proposed_move
+var proposed_move = null
 
 func _process(delta):
 	if paused_function != pausable_functions.none:
@@ -229,13 +228,15 @@ func _process(delta):
 			elif paused_function == pausable_functions.set_stones:
 				set_stones(true)
 			elif paused_function == pausable_functions.propose_move:
+				paused_function = pausable_functions.none # to avoid calling more than once
 				proposed_move = ai.propose_move()
-				paused_function = pausable_functions.try_move
+				paused_function = pausable_functions.try_move # to avoid stuttered move
 				pause = 0.4
 				return
-			elif paused_function == pausable_functions.try_move:
+			elif paused_function == pausable_functions.try_move and proposed_move != null:
 				paused_function = pausable_functions.none
 				try_move(proposed_move, find_stone(proposed_move.from))
+				proposed_move = null
 			paused_function = pausable_functions.none
 
 func new_game():

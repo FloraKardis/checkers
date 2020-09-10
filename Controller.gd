@@ -240,29 +240,8 @@ func contains_move(move : Move, moves : Array):
 	return false
 
 func random_move(state : State) -> Move:
-	var stone_squares : Array = []
-	for square_number in square_numbers:
-		if state.board[square_number] != field.empty:
-			stone_squares.append(square_number)
-	
-	var index : int = randi() % len(stone_squares)
-	var possible_moves : Array = possible_stone_moves(state, stone_squares[index])
-	while possible_moves.empty():
-		stone_squares.remove(index)
-		index = randi() % len(stone_squares)
-		possible_moves = possible_stone_moves(state, stone_squares[index])
-	
-	var moves : Array = []
-	var captures : Array = []
-	for move in possible_moves:
-		if captures.empty():
-			moves.append(move)
-		if is_capture(state, move):
-			captures.append(move)
-	if captures.empty():
-		return moves[randi() % len(moves)]
-	else:
-		return captures[randi() % len(captures)]
+	var moves = possible_moves(state)
+	return moves[randi() % len(moves)]
 
 func possible_moves(state : State) -> Array:
 	var moves : Array = []
