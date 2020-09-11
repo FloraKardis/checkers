@@ -25,6 +25,8 @@ func _ready():
 #	randomize()
 	pass
 
+var thread
+
 func propose_move() -> Controller.Move:
 #	return propose_move_first()
 #	return propose_move_random()
@@ -38,18 +40,34 @@ func propose_move_random() -> Controller.Move:
 
 func propose_move_mcts() -> Controller.Move:
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
-	var timer = OS.get_system_time_msecs()
+	var timer_big = OS.get_system_time_msecs()
 	var root : MCTS_Node = MCTS_Node.new(controller.current_state, null, controller)
-	if len(controller.possible_moves(root.state)) == 1:
+	if len(root.possible_moves) == 1:
+		print(OS.get_system_time_msecs() - timer_big)
 		return select_best(root)
-	reset_timers()
+		
+	var a = 0
+	var b = 0
+	var c = 0
+	var d = 0
+	var timer
+		
 	for iteration in number_of_iterations:
+		timer = OS.get_system_time_msecs()
 		var selected_node : MCTS_Node = selection(root)
+		a += OS.get_system_time_msecs() - timer
+		timer = OS.get_system_time_msecs()
 		var expanded_node : MCTS_Node = expansion(selected_node)
+		b += OS.get_system_time_msecs() - timer
+		timer = OS.get_system_time_msecs()
 		var winner = simulation(expanded_node)
+		c += OS.get_system_time_msecs() - timer
+		timer = OS.get_system_time_msecs()
 		backpropagation(expanded_node, winner)
-	print(OS.get_system_time_msecs() - timer)
-	print_timers()
+		d += OS.get_system_time_msecs() - timer
+		
+	print("\n\n", a, "\n", b, "\n", c, "\n", d)
+	print(OS.get_system_time_msecs() - timer_big)
 	return select_best(root)
 
 func selection(root) -> MCTS_Node:
@@ -87,33 +105,30 @@ func expansion(node) -> MCTS_Node:
 	else:
 		return node
 
+#var calculate_state_after
+#var random_move_timer
+#
+#func reset_timers():
+#	calculate_state_after = 0
+#	random_move_timer = 0
+#	controller.reset_timers()
+#
+#func print_timers():
+#	controller.print_timers(calculate_state_after, random_move_timer)
+
 var tie_limit : int = 50
-
-var calculate_state_after
-var random_move_timer
-
-func reset_timers():
-	calculate_state_after = 0
-	random_move_timer = 0
-	controller.reset_timers()
-
-func print_timers():
-	controller.print_timers(calculate_state_after, random_move_timer)
-
 
 func simulation(node) -> bool:
 	var current_state : Controller.State = controller.deep_copy(node.state)
 	var counter : int = 0
 	
-	var random_move : Controller.Move = node.possible_moves[randi() % len(node.possible_moves)]
+	var random_move : Controller.Move = null
+	if len(node.possible_moves) > 0:
+		random_move = node.possible_moves[randi() % len(node.possible_moves)]
 	while random_move != null and counter < tie_limit:
 		counter += 1
-		var timer = OS.get_system_time_msecs()
 		current_state = controller.calculate_state_after(current_state, random_move, false, false)
-		calculate_state_after += OS.get_system_time_msecs() - timer
-		timer = OS.get_system_time_msecs()
 		random_move = controller.random_move(current_state)
-		random_move_timer += OS.get_system_time_msecs() - timer
 	if counter == tie_limit:
 		return [Controller.stone_color.black, Controller.stone_color.white][randi() % 2] # tie = coinflip
 	else:

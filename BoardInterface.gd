@@ -62,7 +62,7 @@ func reset():
 			redo(controller.history.redo())
 		else:
 			paused_function = pausable_functions.propose_move
-			pause = 0.6
+			pause = 0.3
 	else:
 		reverted_change = null
 		redone_change = null
@@ -231,7 +231,7 @@ func _process(delta):
 				paused_function = pausable_functions.none # to avoid calling more than once
 				proposed_move = ai.propose_move()
 				paused_function = pausable_functions.try_move # to avoid stuttered move
-				pause = 0.4
+				pause = 0.2
 				return
 			elif paused_function == pausable_functions.try_move and proposed_move != null:
 				paused_function = pausable_functions.none

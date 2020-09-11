@@ -101,9 +101,13 @@ func set_square_numbers():
 func set_new_board_state():
 	clear_board_state()
 #	current_state.board[0] = field.black_man
+#	current_state.stone_squares[stone_color.black].append(0)
 #	current_state.board[9] = field.black_man
+#	current_state.stone_squares[stone_color.black].append(9)
 #	current_state.board[25] = field.white_man
+#	current_state.stone_squares[stone_color.white].append(25)
 #	current_state.board[27] = field.white_man
+#	current_state.stone_squares[stone_color.white].append(27)
 	for square_number in square_numbers:
 		var row_number : int = row(square_number)
 		if row_number < stone_rows:
@@ -147,7 +151,6 @@ func state_after(state : State, move : Move) -> State:
 
 func calculate_state_after(old_state : State, move : Move, make_copy : bool, check_win : bool) -> State:
 	# Assumes the move is correct
-	var timer = OS.get_system_time_msecs()
 	var new_state : State
 	if make_copy:
 		new_state = deep_copy(old_state)
@@ -161,15 +164,8 @@ func calculate_state_after(old_state : State, move : Move, make_copy : bool, che
 	new_state.forced_stone = null
 	
 	var more_captures : bool = false
-	
-	setup += OS.get_system_time_msecs() - timer
-	timer = OS.get_system_time_msecs()
-	
+		
 	var between = stones_between(new_state, move)
-	
-	stones_between_timer += OS.get_system_time_msecs() - timer
-	timer = OS.get_system_time_msecs()
-	
 	if between != null:
 		new_state.board[between] = field.empty
 		new_state.stone_squares[switch_color(new_state.player)].erase(between)
@@ -177,29 +173,18 @@ func calculate_state_after(old_state : State, move : Move, make_copy : bool, che
 		if len(possible_moves) > 0 and is_capture(new_state, possible_moves[0]):
 			more_captures = true
 			new_state.forced_stone = move.to
-	
-	forced_stone_timer += OS.get_system_time_msecs() - timer
-	timer = OS.get_system_time_msecs()
-	
+
 	if not more_captures and type(new_state, move.to) == stone_type.man and crownhead(new_state.player, row(move.to)):
 		promote(new_state, move.to)
-	
-	promotion_timer += OS.get_system_time_msecs() - timer
-	timer = OS.get_system_time_msecs()
 	
 	if more_captures:
 		new_state.player = old_state.player
 	else:
 		new_state.player = switch_color(old_state.player)
-		
-	new_player_timer += OS.get_system_time_msecs() - timer
-	timer = OS.get_system_time_msecs()
 	
 	if check_win:
 		if possible_moves(new_state).empty(): # TODO this check could possibly be done earlier to save time
 			new_state.winner = switch_color(new_state.player)
-	
-	check_win_timer += OS.get_system_time_msecs() - timer
 	
 	return new_state
 
@@ -288,54 +273,21 @@ func contains_move(move : Move, moves : Array):
 	return false
 
 func random_move(state : State) -> Move:
-	var moves = possible_moves(state)
-	if len(moves) == 0:
-		return null
+	var moves : Array
+	if state.forced_stone != null:
+		moves = possible_stone_moves(state, state.forced_stone, state.player)
+	else:
+		var stones = state.stone_squares[state.player].duplicate()
+		while len(stones) > 0:
+			var index = randi() % len(stones)
+			moves = possible_stone_moves(state, stones[index], state.player)
+			if moves_are_captures:
+				return moves[randi() % len(moves)]
+			else:
+				stones.remove(index)
+		if len(moves) == 0:
+			return null
 	return moves[randi() % len(moves)]
-
-
-var setup = 0
-var stones_between_timer = 0
-var forced_stone_timer = 0
-var promotion_timer = 0
-var new_player_timer = 0
-var check_win_timer = 0
-var declaring = 0
-var man_captures = 0
-var man_moves = 0
-var king_moves = 0
-var appending = 0
-var possible_timer = 0
-
-func reset_timers():
-	setup = 0
-	stones_between_timer = 0
-	forced_stone_timer = 0
-	promotion_timer = 0
-	new_player_timer = 0
-	check_win_timer = 0
-	declaring = 0
-	man_captures = 0
-	man_moves = 0
-	king_moves = 0
-	appending = 0
-	possible_timer = 0
-
-func print_timers(calculate_state_after, random_move_timer):
-	print("calculate_state_after: ", calculate_state_after)
-	print("    setup:          ", setup)
-	print("    stones_between: ", stones_between_timer)
-	print("    forced_stone:   ", forced_stone_timer)
-	print("    promotion:      ", promotion_timer)
-	print("    new_player:     ", new_player_timer)
-	print("    check_win:      ", check_win_timer)
-	print("random_move:           ", random_move_timer)
-	print("    declaring:      ", declaring)
-	print("    man_captures:   ", man_captures)
-	print("    man_moves:      ", man_moves)
-	print("    king_moves:     ", king_moves)
-	print("    possible_timer: ", possible_timer)
-	print("    appending:      ", appending)
 
 func possible_moves(state : State) -> Array:
 	if state.forced_stone != null:
@@ -343,17 +295,13 @@ func possible_moves(state : State) -> Array:
 	var moves : Array = []
 	var captures : Array = []
 	for square_number in state.stone_squares[state.player]:
-		var timer = OS.get_system_time_msecs()
 		var stone_moves = possible_stone_moves(state, square_number, state.player)
-		possible_timer += OS.get_system_time_msecs() - timer
-		timer = OS.get_system_time_msecs()
 		if moves_are_captures:
 			for move in stone_moves:
 				captures.append(move)
 		else:
 			for move in stone_moves:
 				moves.append(move)
-		appending += OS.get_system_time_msecs() - timer
 	if captures.empty():
 		return moves
 	else:
@@ -362,21 +310,15 @@ func possible_moves(state : State) -> Array:
 var moves_are_captures : bool
 
 func possible_stone_moves(state : State, from : int, color : int) -> Array:
-	var timer_big = OS.get_system_time_msecs()
 	var moves : Array = []
-	var timer
 	var type = field_type(state.board[from])
-	declaring += OS.get_system_time_msecs() - timer_big
 	if type == stone_type.man:
-		timer = OS.get_system_time_msecs()
 		for fields_in_direction in diagonals[from]:
 			if len(fields_in_direction) > 1:
 				var to : int = fields_in_direction[1]
 				var between : int = fields_in_direction[0]
 				if state.board[to] == field.empty and state.board[between] != field.empty and color(state, between) == switch_color(color):
 					moves.append(Move.new(from, to))
-		man_captures += OS.get_system_time_msecs() - timer
-		timer = OS.get_system_time_msecs()
 		if moves.empty():
 			moves_are_captures = false
 			for direction in man_directions[color]:
@@ -387,9 +329,7 @@ func possible_stone_moves(state : State, from : int, color : int) -> Array:
 						moves.append(Move.new(from, to))
 		else:
 			moves_are_captures = true
-		man_moves += OS.get_system_time_msecs() - timer
 	else: # if stone.type == stone_type.king:
-		timer = OS.get_system_time_msecs()
 		var non_captures : Array = []
 		var captures : Array = []
 		for direction in all_directions:
@@ -410,8 +350,6 @@ func possible_stone_moves(state : State, from : int, color : int) -> Array:
 		else:
 			moves_are_captures = true
 			moves = captures
-		king_moves += OS.get_system_time_msecs() - timer
-	possible_timer += OS.get_system_time_msecs() - timer_big
 	return moves
 
 func is_capture(state, move):
