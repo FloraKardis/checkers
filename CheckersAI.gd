@@ -4,12 +4,14 @@ class_name CheckersAI
 
 class MCTS_Node:
 	var state : Controller.State
+	var possible_moves : Array
 	var parent : MCTS_Node
 	var children : Array
 	var visits : int = 0
 	var wins : int = 0
-	func _init(s, p):
+	func _init(s, p, controller):
 		state = s
+		possible_moves = controller.possible_moves(state)
 		parent = p
 		children = []
 
@@ -36,19 +38,23 @@ func propose_move_random() -> Controller.Move:
 
 func propose_move_mcts() -> Controller.Move:
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
-	var root : MCTS_Node = MCTS_Node.new(controller.current_state, null)
+	var timer = OS.get_system_time_msecs()
+	var root : MCTS_Node = MCTS_Node.new(controller.current_state, null, controller)
 	if len(controller.possible_moves(root.state)) == 1:
 		return select_best(root)
+	reset_timers()
 	for iteration in number_of_iterations:
 		var selected_node : MCTS_Node = selection(root)
 		var expanded_node : MCTS_Node = expansion(selected_node)
 		var winner = simulation(expanded_node)
 		backpropagation(expanded_node, winner)
+	print(OS.get_system_time_msecs() - timer)
+	print_timers()
 	return select_best(root)
 
 func selection(root) -> MCTS_Node:
 	var current_node : MCTS_Node = root
-	while len(current_node.children) != 0 and len(current_node.children) == len(controller.possible_moves(current_node.state)):
+	while len(current_node.children) != 0 and len(current_node.children) == len(current_node.possible_moves):
 		current_node = select_child(current_node.children)
 	return current_node
 
@@ -72,29 +78,46 @@ func select_child(children) -> MCTS_Node:
 	return best_child
 
 func expansion(node) -> MCTS_Node:
-	var possible_moves : Array = controller.possible_moves(node.state)
-	if len(possible_moves) > 0:
-		var untested_move : Controller.Move = possible_moves[len(node.children)]
+#	var possible_moves : Array = controller.possible_moves(node.state)
+	if len(node.possible_moves) > 0:
+		var untested_move : Controller.Move = node.possible_moves[len(node.children)]
 		var new_state = controller.state_after(node.state, untested_move)
-		node.children.append(MCTS_Node.new(new_state, node))
+		node.children.append(MCTS_Node.new(new_state, node, controller))
 		return node.children.back()
 	else:
 		return node
 
 var tie_limit : int = 50
 
+var calculate_state_after
+var random_move_timer
+
+func reset_timers():
+	calculate_state_after = 0
+	random_move_timer = 0
+	controller.reset_timers()
+
+func print_timers():
+	controller.print_timers(calculate_state_after, random_move_timer)
+
+
 func simulation(node) -> bool:
-	var current_state : Controller.State = node.state
-	var timer
+	var current_state : Controller.State = controller.deep_copy(node.state)
 	var counter : int = 0
-	while current_state.winner == null and counter < tie_limit:
+	
+	var random_move : Controller.Move = node.possible_moves[randi() % len(node.possible_moves)]
+	while random_move != null and counter < tie_limit:
 		counter += 1
-		var random_move : Controller.Move = controller.random_move(current_state)
-		current_state = controller.state_after(current_state, random_move)
+		var timer = OS.get_system_time_msecs()
+		current_state = controller.calculate_state_after(current_state, random_move, false, false)
+		calculate_state_after += OS.get_system_time_msecs() - timer
+		timer = OS.get_system_time_msecs()
+		random_move = controller.random_move(current_state)
+		random_move_timer += OS.get_system_time_msecs() - timer
 	if counter == tie_limit:
 		return [Controller.stone_color.black, Controller.stone_color.white][randi() % 2] # tie = coinflip
 	else:
-		return current_state.winner
+		return controller.switch_color(current_state.player)
 
 func big_advantage(state : Controller.State):
 	var black_men : int = controller.count_stones(state, Controller.stone_type.man, Controller.stone_color.black)
@@ -114,7 +137,8 @@ func backpropagation(node : MCTS_Node, winner):
 			node.wins += 1
 		node = node.parent
 
-func select_best(root) -> Controller.Move:
+func select_best(root) -> Controller.Move: 
+	# TODO tu by można zrobić, że jeśli sytuacja jest beznadziejna, to remis
 	var best_index : int = 0
 	for child_index in len(root.children):
 		if root.children[child_index].visits > root.children[best_index].visits:

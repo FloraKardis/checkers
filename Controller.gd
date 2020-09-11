@@ -17,11 +17,13 @@ class Move:
 
 class State:
 	var board
+	var stone_squares
 	var player
 	var forced_stone
 	var winner
-	func _init(b, p, fs, w):
+	func _init(b, ss, p, fs, w):
 		board = b
+		stone_squares = ss
 		player = p
 		forced_stone = fs
 		winner = w
@@ -48,7 +50,12 @@ const board_size : int = 8
 const stone_rows : int = 3
 
 var square_numbers : Array # of int
-#var numbers_array : Array # of Array of int
+var diagonals : Array
+# 3-dimensional array, storing squares reachable from a given square, by direction and distance, e.g.:
+# diagonals[square_number][direction][distance]
+var colors : Array
+var types : Array
+var man_directions : Array
 var current_state : State
 
 onready var history : History = get_node("History")
@@ -67,32 +74,48 @@ func set_square_numbers():
 	for number in range(1, board_size * board_size + 1):
 		if number % 2 + (1 - 2 * (number % 2)) * (number - 1) / board_size % 2:
 			square_numbers.append(number - 1)
-#	numbers_array = []
-#	for _row in board_size:
-#		var row : Array = []
-#		for _column in board_size:
-#			row.append(-1)
-#		numbers_array.append(row)
-#	for square_number in square_numbers:
-#		numbers_array[square_number / 8][square_number % 8] = square_number
-#	print(numbers_array)
+	diagonals = []
+	for index in board_size * board_size:
+		diagonals.append(null)
+	for square_number in square_numbers:
+		diagonals[square_number] = []
+		for direction in all_directions:
+			diagonals[square_number].append([])
+			for distance in range(1, board_size):
+				var number = square_number + direction_to_number(direction) * distance
+				if number in square_numbers:
+					diagonals[square_number][direction].append(number)
+	colors = []
+	types = []
+	for i in range(5):
+		colors.append(stone_color.white)
+		types.append(stone_type.man)
+	colors[field.black_man] = stone_color.black
+	colors[field.black_king] = stone_color.black
+	types[field.black_king] = stone_type.king
+	types[field.white_king] = stone_type.king
+	man_directions = [null, null]
+	man_directions[stone_color.black] = [move_direction.NW, move_direction.NE]
+	man_directions[stone_color.white] = [move_direction.SE, move_direction.SW]
 
 func set_new_board_state():
 	clear_board_state()
-#	current_state.board[0] = Stone.new(stone_color.black, stone_type.man, 0)
-#	current_state.board[9] = Stone.new(stone_color.black, stone_type.man, 9)
-#	current_state.board[25] = Stone.new(stone_color.white, stone_type.man, 25)
-#	current_state.board[27] = Stone.new(stone_color.white, stone_type.man, 27)
+#	current_state.board[0] = field.black_man
+#	current_state.board[9] = field.black_man
+#	current_state.board[25] = field.white_man
+#	current_state.board[27] = field.white_man
 	for square_number in square_numbers:
 		var row_number : int = row(square_number)
 		if row_number < stone_rows:
 			current_state.board[square_number] = field.black_man
+			current_state.stone_squares[stone_color.black].append(square_number)
 		if row_number >= board_size - stone_rows:
 			current_state.board[square_number] = field.white_man
+			current_state.stone_squares[stone_color.white].append(square_number)
 	current_state.player = first_player
 
 func clear_board_state():
-	current_state = State.new([], first_player, null, null)
+	current_state = State.new([], [[],[]], first_player, null, null)
 	for _square_number in range(board_size * board_size):
 		current_state.board.append(field.empty)
 
@@ -103,10 +126,7 @@ func make_move(move : Move) -> Change:
 		var old_state = deep_copy(current_state)
 		var new_state = state_after(current_state, move)
 		
-		var captured = null
-		var between : Array = stones_between(current_state, move)
-		if len(between) == 1:
-			captured = between[0]
+		var captured = stones_between(current_state, move)
 		var promoted : bool = type(old_state, move.from) != type(new_state, move.to)
 
 		current_state = new_state
@@ -120,31 +140,67 @@ func make_move(move : Move) -> Change:
 		return change
 
 func deep_copy(state : State) -> State:
-	return State.new(state.board.duplicate(), state.player, state.forced_stone, state.winner)
+	return State.new(state.board.duplicate(), state.stone_squares.duplicate(true), state.player, state.forced_stone, state.winner)
 
-func state_after(old_state : State, move : Move):
-	# Assumes the move is correct	
-	var new_state : State = deep_copy(old_state)
+func state_after(state : State, move : Move) -> State:
+	return calculate_state_after(state, move, true, true)
+
+func calculate_state_after(old_state : State, move : Move, make_copy : bool, check_win : bool) -> State:
+	# Assumes the move is correct
+	var timer = OS.get_system_time_msecs()
+	var new_state : State
+	if make_copy:
+		new_state = deep_copy(old_state)
+	else:
+		new_state = old_state
+	
 	new_state.board[move.to] = new_state.board[move.from]
 	new_state.board[move.from] = field.empty
+	new_state.stone_squares[new_state.player].erase(move.from)
+	new_state.stone_squares[new_state.player].append(move.to)
 	new_state.forced_stone = null
 	
 	var more_captures : bool = false
-	var between : Array = stones_between(new_state, move)
-	if len(between) == 1:
-		new_state.board[between[0]] = field.empty
-		var possible_moves : Array = possible_stone_moves(new_state, move.to)
+	
+	setup += OS.get_system_time_msecs() - timer
+	timer = OS.get_system_time_msecs()
+	
+	var between = stones_between(new_state, move)
+	
+	stones_between_timer += OS.get_system_time_msecs() - timer
+	timer = OS.get_system_time_msecs()
+	
+	if between != null:
+		new_state.board[between] = field.empty
+		new_state.stone_squares[switch_color(new_state.player)].erase(between)
+		var possible_moves : Array = possible_stone_moves(new_state, move.to, new_state.player)
 		if len(possible_moves) > 0 and is_capture(new_state, possible_moves[0]):
 			more_captures = true
 			new_state.forced_stone = move.to
+	
+	forced_stone_timer += OS.get_system_time_msecs() - timer
+	timer = OS.get_system_time_msecs()
+	
 	if not more_captures and type(new_state, move.to) == stone_type.man and crownhead(new_state.player, row(move.to)):
 		promote(new_state, move.to)
+	
+	promotion_timer += OS.get_system_time_msecs() - timer
+	timer = OS.get_system_time_msecs()
+	
 	if more_captures:
 		new_state.player = old_state.player
 	else:
 		new_state.player = switch_color(old_state.player)
-	if possible_moves(new_state).empty(): # TODO this check could possibly be done earlier to save time
-		new_state.winner = switch_color(new_state.player)
+		
+	new_player_timer += OS.get_system_time_msecs() - timer
+	timer = OS.get_system_time_msecs()
+	
+	if check_win:
+		if possible_moves(new_state).empty(): # TODO this check could possibly be done earlier to save time
+			new_state.winner = switch_color(new_state.player)
+	
+	check_win_timer += OS.get_system_time_msecs() - timer
+	
 	return new_state
 
 func revert(change : Change):
@@ -160,16 +216,16 @@ func promote(state : State, square_number : int):
 		state.board[square_number] = field.white_king
 
 func type(state : State, square_number : int):
-	if state.board[square_number] == field.black_man or state.board[square_number] == field.white_man:
-		return stone_type.man
-	else:
-		return stone_type.king
+	return types[state.board[square_number]]
+
+func field_type(stone_field):
+	return types[stone_field]
 
 func color(state : State, square_number : int):
-	if state.board[square_number] == field.black_man or state.board[square_number] == field.black_king:
-		return stone_color.black
-	else:
-		return stone_color.white
+	return colors[state.board[square_number]]
+
+func field_color(stone_field):
+	return colors[stone_field]
 
 func crownhead(color, row):
 	return (color == stone_color.black and row == board_size - 1) or (color == stone_color.white and row == 0)
@@ -184,43 +240,35 @@ func direction_to_number(direction) -> int:
 	return signum * (board_size + offset)
 
 func get_square(square_number : int, direction, distance) -> int:
-	return square_number + direction_to_number(direction) * distance
+	return diagonals[square_number][direction][distance]
 
-func get_direction(from, to): # -> move_direction:
-	if (from == 0) and (to == board_size * board_size -1):
+func get_direction(move): # -> move_direction:
+	if (move.from == 0) and (move.to == board_size * board_size -1):
 		return move_direction.NE
-	if row(from) < row(to):
-		if (to - from) % (board_size + 1) == 0:
+	if row(move.from) < row(move.to):
+		if (move.to - move.from) % (board_size + 1) == 0:
 			return move_direction.NE
 		else:
 			return move_direction.NW
 	else: # row(from) > row(to):
-		if (to - from) % (board_size + 1) == 0:
+		if (move.to - move.from) % (board_size + 1) == 0:
 			return move_direction.SW
 		else:
 			return move_direction.SE
 
-func get_distance(from, to):
-	if int(abs(from - to)) % (board_size + 1) == 0:
-		return int(abs(from - to)) / (board_size + 1)
-	elif int(abs(from - to)) % (board_size - 1) == 0:
-		return int(abs(from - to)) / (board_size - 1)
-
-func diagonals(square_number) -> Array:
-	var diagonals_array : Array = []
-	for direction in all_directions:
-		var temp : int = square_number
-		while get_square(temp, direction, 1) in square_numbers:
-			temp = get_square(temp, direction, 1)
-			diagonals_array.append(temp)
-	return diagonals_array
+func get_distance(move):
+	if int(abs(move.from - move.to)) % (board_size + 1) == 0:
+		return int(abs(move.from - move.to)) / (board_size + 1)
+	elif int(abs(move.from - move.to)) % (board_size - 1) == 0:
+		return int(abs(move.from - move.to)) / (board_size - 1)
 
 func compatible_with_current_state(state, move : Move):
 	if not move.from in square_numbers or not move.to in square_numbers:
 		return false
-	if state.board[move.from] == field.empty or state.board[move.to] != field.empty:
+	var stone_field_from = state.board[move.from]
+	if stone_field_from == field.empty or state.board[move.to] != field.empty:
 		return false
-	if not color(state, move.from) == state.player:
+	if not field_color(stone_field_from) == state.player:
 		return false
 	return true
 
@@ -241,73 +289,153 @@ func contains_move(move : Move, moves : Array):
 
 func random_move(state : State) -> Move:
 	var moves = possible_moves(state)
+	if len(moves) == 0:
+		return null
 	return moves[randi() % len(moves)]
 
+
+var setup = 0
+var stones_between_timer = 0
+var forced_stone_timer = 0
+var promotion_timer = 0
+var new_player_timer = 0
+var check_win_timer = 0
+var declaring = 0
+var man_captures = 0
+var man_moves = 0
+var king_moves = 0
+var appending = 0
+var possible_timer = 0
+
+func reset_timers():
+	setup = 0
+	stones_between_timer = 0
+	forced_stone_timer = 0
+	promotion_timer = 0
+	new_player_timer = 0
+	check_win_timer = 0
+	declaring = 0
+	man_captures = 0
+	man_moves = 0
+	king_moves = 0
+	appending = 0
+	possible_timer = 0
+
+func print_timers(calculate_state_after, random_move_timer):
+	print("calculate_state_after: ", calculate_state_after)
+	print("    setup:          ", setup)
+	print("    stones_between: ", stones_between_timer)
+	print("    forced_stone:   ", forced_stone_timer)
+	print("    promotion:      ", promotion_timer)
+	print("    new_player:     ", new_player_timer)
+	print("    check_win:      ", check_win_timer)
+	print("random_move:           ", random_move_timer)
+	print("    declaring:      ", declaring)
+	print("    man_captures:   ", man_captures)
+	print("    man_moves:      ", man_moves)
+	print("    king_moves:     ", king_moves)
+	print("    possible_timer: ", possible_timer)
+	print("    appending:      ", appending)
+
 func possible_moves(state : State) -> Array:
+	if state.forced_stone != null:
+		return possible_stone_moves(state, state.forced_stone, state.player)
 	var moves : Array = []
 	var captures : Array = []
-	for square_number in square_numbers:
-		if state.board[square_number] != field.empty:
-			if color(state, square_number) == state.player:
-				for move in possible_stone_moves(state, square_number):
-					if is_capture(state, move):
-						captures.append(move)
-					if captures.empty():
-						moves.append(move)
+	for square_number in state.stone_squares[state.player]:
+		var timer = OS.get_system_time_msecs()
+		var stone_moves = possible_stone_moves(state, square_number, state.player)
+		possible_timer += OS.get_system_time_msecs() - timer
+		timer = OS.get_system_time_msecs()
+		if moves_are_captures:
+			for move in stone_moves:
+				captures.append(move)
+		else:
+			for move in stone_moves:
+				moves.append(move)
+		appending += OS.get_system_time_msecs() - timer
 	if captures.empty():
 		return moves
 	else:
 		return captures
 
-func possible_stone_moves(state : State, from : int) -> Array:
-	var non_captures : Array = []
-	var captures : Array = []
-	if type(state, from) == stone_type.man:
-		for direction in all_directions:
-			var to : int = get_square(from, direction, 2)
-			var between : int = get_square(from, direction, 1)
-			if to in square_numbers and state.board[to] == field.empty and state.board[between] != field.empty and color(state, between) == switch_color(color(state, from)):
-				captures.append(Move.new(from, to))
-		if captures.empty():
-			for direction in man_directions(color(state, from)):
-				var to : int = get_square(from, direction, 1)
-				if to in square_numbers and state.board[to] == field.empty:
-					non_captures.append(Move.new(from, to))
+var moves_are_captures : bool
+
+func possible_stone_moves(state : State, from : int, color : int) -> Array:
+	var timer_big = OS.get_system_time_msecs()
+	var moves : Array = []
+	var timer
+	var type = field_type(state.board[from])
+	declaring += OS.get_system_time_msecs() - timer_big
+	if type == stone_type.man:
+		timer = OS.get_system_time_msecs()
+		for fields_in_direction in diagonals[from]:
+			if len(fields_in_direction) > 1:
+				var to : int = fields_in_direction[1]
+				var between : int = fields_in_direction[0]
+				if state.board[to] == field.empty and state.board[between] != field.empty and color(state, between) == switch_color(color):
+					moves.append(Move.new(from, to))
+		man_captures += OS.get_system_time_msecs() - timer
+		timer = OS.get_system_time_msecs()
+		if moves.empty():
+			moves_are_captures = false
+			for direction in man_directions[color]:
+				var fields_in_direction = diagonals[from][direction]
+				if not fields_in_direction.empty():
+					var to : int = fields_in_direction[0]
+					if state.board[to] == field.empty:
+						moves.append(Move.new(from, to))
+		else:
+			moves_are_captures = true
+		man_moves += OS.get_system_time_msecs() - timer
 	else: # if stone.type == stone_type.king:
-		for to in diagonals(from):
-			if state.board[to] == field.empty:
-				var new_move : Move = Move.new(from, to)
-				if is_capture(state, new_move):
-					captures.append(new_move)
-				else:
-					non_captures.append(new_move)
-	if captures.empty():
-		return non_captures
-	else:
-		return captures
+		timer = OS.get_system_time_msecs()
+		var non_captures : Array = []
+		var captures : Array = []
+		for direction in all_directions:
+			for to in diagonals[from][direction]:
+				if state.board[to] == field.empty:
+					var new_move : Move = Move.new(from, to)
+					if get_distance(new_move) < 2:
+						non_captures.append(new_move)
+					else:
+						var between = stones_between(state, new_move)
+						if between != null and color(state, between) == switch_color(color(state, from)):
+							captures.append(new_move)
+						else:
+							non_captures.append(new_move)
+		if captures.empty():
+			moves_are_captures = false
+			moves = non_captures
+		else:
+			moves_are_captures = true
+			moves = captures
+		king_moves += OS.get_system_time_msecs() - timer
+	possible_timer += OS.get_system_time_msecs() - timer_big
+	return moves
 
 func is_capture(state, move):
-	if get_distance(move.from, move.to) < 2:
+	if get_distance(move) < 2:
 		return false
 	else:
-		var stones_array: Array = stones_between(state, move)
-		return state.board[move.to] == field.empty and len(stones_array) == 1 and color(state, stones_array[0]) == switch_color(color(state, move.from))
+		var between = stones_between(state, move)
+		return state.board[move.to] == field.empty and between != null and color(state, between) == switch_color(color(state, move.from))
 
-func stones_between(state : State, move : Move) -> Array:
-	var stones_array : Array = []
-	var direction = get_direction(move.from, move.to)
-	var temp : int = get_square(move.from, direction, 1)
-	while temp != move.to:
-		if state.board[temp] != field.empty:
-			stones_array.append(temp)
-		temp = get_square(temp, direction, 1)
-	return stones_array
-
-func man_directions(color) -> Array:
-	if color == stone_color.black:
-		return [move_direction.NW, move_direction.NE]
-	else: # color == stone_color.white:
-		return [move_direction.SE, move_direction.SW]
+func stones_between(state : State, move : Move):
+	var stone = null
+	var direction = get_direction(move)
+	var fields_in_direction = diagonals[move.from][direction]
+	var index : int = 0 # TODO jeśli dictionary to 1
+	var between : int = fields_in_direction[index]
+	while between != move.to:
+		if state.board[between] != field.empty:
+			if stone == null:
+				stone = between
+			else:
+				return null
+		index += 1
+		between = fields_in_direction[index]
+	return stone
 
 func switch_color(color):
 	if color == stone_color.black:
