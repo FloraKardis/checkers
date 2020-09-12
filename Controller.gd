@@ -71,6 +71,7 @@ func reset():
 
 func set_square_numbers():
 	# https://oeis.org/A225240
+	square_numbers.clear()
 	for number in range(1, board_size * board_size + 1):
 		if number % 2 + (1 - 2 * (number % 2)) * (number - 1) / board_size % 2:
 			square_numbers.append(number - 1)
@@ -108,6 +109,7 @@ func set_new_board_state():
 #	current_state.stone_squares[stone_color.white].append(25)
 #	current_state.board[27] = field.white_man
 #	current_state.stone_squares[stone_color.white].append(27)
+
 	for square_number in square_numbers:
 		var row_number : int = row(square_number)
 		if row_number < stone_rows:
@@ -116,6 +118,14 @@ func set_new_board_state():
 		if row_number >= board_size - stone_rows:
 			current_state.board[square_number] = field.white_man
 			current_state.stone_squares[stone_color.white].append(square_number)
+
+	current_state.board[32] = field.black_man
+	current_state.stone_squares[stone_color.black].append(32)
+	current_state.board[25] = field.white_man
+	current_state.stone_squares[stone_color.white].append(25)
+	current_state.board[18] = field.empty
+	current_state.stone_squares[stone_color.black].erase(18)
+
 	current_state.player = first_player
 
 func clear_board_state():
@@ -141,6 +151,13 @@ func make_move(move : Move) -> Change:
 			captured, promoted, new_state.winner)
 		if save_history:
 			history.add(change)
+		print("\n\nnew state:")
+		print_board(current_state.board)
+		print("current player: ", current_state.player)
+		print("black stones:   ", current_state.stone_squares[stone_color.black])
+		print("white stones:   ", current_state.stone_squares[stone_color.white])
+		print("forced stone:   ", current_state.forced_stone)
+		print("winner:         ", current_state.winner)
 		return change
 
 func deep_copy(state : State) -> State:
@@ -273,21 +290,32 @@ func contains_move(move : Move, moves : Array):
 	return false
 
 func random_move(state : State) -> Move:
-	var moves : Array
 	if state.forced_stone != null:
-		moves = possible_stone_moves(state, state.forced_stone, state.player)
+		var moves = possible_stone_moves(state, state.forced_stone, state.player)
+		return moves[randi() % len(moves)]
 	else:
-		var stones = state.stone_squares[state.player].duplicate()
-		while len(stones) > 0:
-			var index = randi() % len(stones)
-			moves = possible_stone_moves(state, stones[index], state.player)
-			if moves_are_captures:
-				return moves[randi() % len(moves)]
-			else:
-				stones.remove(index)
+		var moves = possible_moves(state)
 		if len(moves) == 0:
 			return null
-	return moves[randi() % len(moves)]
+		else:
+			return moves[randi() % len(moves)]
+
+#func random_move(state : State) -> Move:
+#	var moves : Array
+#	if state.forced_stone != null:
+#		moves = possible_stone_moves(state, state.forced_stone, state.player)
+#	else:
+#		var stones = state.stone_squares[state.player].duplicate()
+#		while len(stones) > 0:
+#			var index = randi() % len(stones)
+#			moves = possible_stone_moves(state, stones[index], state.player)
+#			if moves_are_captures:
+#				return moves[randi() % len(moves)]
+#			else:
+#				stones.remove(index)
+#		if len(moves) == 0:
+#			return null
+#	return moves[randi() % len(moves)]
 
 func possible_moves(state : State) -> Array:
 	if state.forced_stone != null:
@@ -340,8 +368,9 @@ func possible_stone_moves(state : State, from : int, color : int) -> Array:
 						non_captures.append(new_move)
 					else:
 						var between = stones_between(state, new_move)
-						if between != null and color(state, between) == switch_color(color(state, from)):
-							captures.append(new_move)
+						if between != null:
+							if color(state, between) == switch_color(color(state, from)):
+								captures.append(new_move)
 						else:
 							non_captures.append(new_move)
 		if captures.empty():

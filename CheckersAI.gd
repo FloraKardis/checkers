@@ -5,6 +5,7 @@ class_name CheckersAI
 class MCTS_Node:
 	var state : Controller.State
 	var possible_moves : Array
+#	var possible_moves_number : int # TODO: This could slightly help
 	var parent : MCTS_Node
 	var children : Array
 	var visits : int = 0
@@ -17,7 +18,7 @@ class MCTS_Node:
 
 
 var controller 
-var number_of_iterations = 200 # 1000 is good enough
+var number_of_iterations = 5000
 var ai_player = Controller.stone_color.white
 
 
@@ -96,7 +97,6 @@ func select_child(children) -> MCTS_Node:
 	return best_child
 
 func expansion(node) -> MCTS_Node:
-#	var possible_moves : Array = controller.possible_moves(node.state)
 	if len(node.possible_moves) > 0:
 		var untested_move : Controller.Move = node.possible_moves[len(node.children)]
 		var new_state = controller.state_after(node.state, untested_move)
@@ -105,44 +105,41 @@ func expansion(node) -> MCTS_Node:
 	else:
 		return node
 
-#var calculate_state_after
-#var random_move_timer
-#
-#func reset_timers():
-#	calculate_state_after = 0
-#	random_move_timer = 0
-#	controller.reset_timers()
-#
-#func print_timers():
-#	controller.print_timers(calculate_state_after, random_move_timer)
-
-var tie_limit : int = 50
+var tie_limit : int = 0
 
 func simulation(node) -> bool:
 	var current_state : Controller.State = controller.deep_copy(node.state)
 	var counter : int = 0
 	
+	var big_advantage = null
 	var random_move : Controller.Move = null
 	if len(node.possible_moves) > 0:
 		random_move = node.possible_moves[randi() % len(node.possible_moves)]
-	while random_move != null and counter < tie_limit:
+	while random_move != null and counter < tie_limit and big_advantage == null:
 		counter += 1
 		current_state = controller.calculate_state_after(current_state, random_move, false, false)
 		random_move = controller.random_move(current_state)
+		big_advantage = big_advantage(node.state, current_state)
 	if counter == tie_limit:
 		return [Controller.stone_color.black, Controller.stone_color.white][randi() % 2] # tie = coinflip
+	elif big_advantage != null:
+		return big_advantage
 	else:
 		return controller.switch_color(current_state.player)
 
-func big_advantage(state : Controller.State):
-	var black_men : int = controller.count_stones(state, Controller.stone_type.man, Controller.stone_color.black)
-	var white_men : int = controller.count_stones(state, Controller.stone_type.man, Controller.stone_color.white)
-	var black_kings : int = controller.count_stones(state, Controller.stone_type.king, Controller.stone_color.black)
-	var white_kings : int = controller.count_stones(state, Controller.stone_type.king, Controller.stone_color.white)
-	if black_men >= white_men + 2 and black_kings > white_kings:
-		return controller.stone_color.black
-	if white_men >= black_men + 2 and white_kings > black_kings:
-		return controller.stone_color.white
+var big_stones_difference = 3
+
+func big_advantage(old_state : Controller.State, new_state : Controller.State):
+	var black_stones_old : int = len(old_state.stone_squares[Controller.stone_color.black])
+	var white_stones_old : int = len(old_state.stone_squares[Controller.stone_color.white])
+	var black_stones_new : int = len(new_state.stone_squares[Controller.stone_color.black])
+	var white_stones_new : int = len(new_state.stone_squares[Controller.stone_color.white])
+	var black_stones_lost : int = black_stones_old - black_stones_new
+	var white_stones_lost : int = white_stones_old - white_stones_new
+	if black_stones_lost + big_stones_difference <= white_stones_lost:
+		return Controller.stone_color.black
+	if white_stones_lost + big_stones_difference <= white_stones_lost:
+		return Controller.stone_color.white
 	return null
 
 func backpropagation(node : MCTS_Node, winner):
