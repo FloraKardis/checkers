@@ -8,12 +8,12 @@ enum move_direction { NW, NE, SE, SW }
 
 enum field { empty, black_man, black_king, white_man, white_king }
 
-class Move:
-	var from
-	var to
-	func _init(f, t):
-		from = f
-		to = t
+#class Move:
+#	var from
+#	var to
+#	func _init(f, t):
+#		from = f
+#		to = t
 
 class State:
 	var board
@@ -45,14 +45,19 @@ class Change:
 
 
 const all_directions : Array = [move_direction.NW, move_direction.NE, move_direction.SE, move_direction.SW]
+const all_colors : Array = [stone_color.black, stone_color.white]
 const first_player = stone_color.black
 const board_size : int = 8
 const stone_rows : int = 3
+# Move:
+const from = 0
+const to = 1
 
 var square_numbers : Array # of int
 var diagonals : Array
 # 3-dimensional array, storing squares reachable from a given square, by direction and distance, e.g.:
 # diagonals[square_number][direction][distance]
+
 var colors : Array
 var types : Array
 var man_directions : Array
@@ -128,45 +133,53 @@ func set_new_board_state():
 
 	current_state.player = first_player
 
+
 func clear_board_state():
 	current_state = State.new([], [[],[]], first_player, null, null)
 	for _square_number in range(board_size * board_size):
 		current_state.board.append(field.empty)
 
-func make_move(move : Move) -> Change:
+func make_move(move) -> Change:
 	if not is_correct_move(current_state, move):
 		return null
 	else:
 		var old_state = deep_copy(current_state)
 		var new_state = state_after(current_state, move)
 		
-		var captured = stones_between(current_state, move)
-		var promoted : bool = type(old_state, move.from) != type(new_state, move.to)
+		var captured = stone_between(current_state, move)
+		var promoted : bool = type(old_state, move[from]) != type(new_state, move[to])
 
 		current_state = new_state
 		var change : Change = Change.new(
 			old_state, 
 			deep_copy(new_state), 
-			Move.new(move.from, move.to), # TODO maybe copy not necessary?
+			move, # TODO is copy neccessary?
 			captured, promoted, new_state.winner)
 		if save_history:
 			history.add(change)
-		print("\n\nnew state:")
-		print_board(current_state.board)
-		print("current player: ", current_state.player)
-		print("black stones:   ", current_state.stone_squares[stone_color.black])
-		print("white stones:   ", current_state.stone_squares[stone_color.white])
-		print("forced stone:   ", current_state.forced_stone)
-		print("winner:         ", current_state.winner)
+#		print("\n\nnew state:")
+#		print_board(current_state.board)
+#		print("current player: ", current_state.player)
+#		print("black stones:   ", current_state.stone_squares[stone_color.black])
+#		print("white stones:   ", current_state.stone_squares[stone_color.white])
+#		print("forced stone:   ", current_state.forced_stone)
+#		print("winner:         ", current_state.winner)
+		var moves = possible_moves(current_state)
+#		for _i in range(1000):
+#			var random_move = random_move(current_state)
+#			for possible_move in moves:
+#				if possible_move[from] == random_move[from] and possible_move[to] == random_move[to]:
+#					moves.erase(possible_move)
+#		print("not proposed by random_move(): ", moves)
 		return change
 
 func deep_copy(state : State) -> State:
 	return State.new(state.board.duplicate(), state.stone_squares.duplicate(true), state.player, state.forced_stone, state.winner)
 
-func state_after(state : State, move : Move) -> State:
+func state_after(state : State, move) -> State:
 	return calculate_state_after(state, move, true, true)
 
-func calculate_state_after(old_state : State, move : Move, make_copy : bool, check_win : bool) -> State:
+func calculate_state_after(old_state : State, move, make_copy : bool, check_win : bool) -> State:
 	# Assumes the move is correct
 	var new_state : State
 	if make_copy:
@@ -174,25 +187,25 @@ func calculate_state_after(old_state : State, move : Move, make_copy : bool, che
 	else:
 		new_state = old_state
 	
-	new_state.board[move.to] = new_state.board[move.from]
-	new_state.board[move.from] = field.empty
-	new_state.stone_squares[new_state.player].erase(move.from)
-	new_state.stone_squares[new_state.player].append(move.to)
+	new_state.board[move[to]] = new_state.board[move[from]]
+	new_state.board[move[from]] = field.empty
+	new_state.stone_squares[new_state.player].erase(move[from])
+	new_state.stone_squares[new_state.player].append(move[to])
 	new_state.forced_stone = null
 	
 	var more_captures : bool = false
 		
-	var between = stones_between(new_state, move)
+	var between = stone_between(new_state, move)
 	if between != null:
 		new_state.board[between] = field.empty
 		new_state.stone_squares[switch_color(new_state.player)].erase(between)
-		var possible_moves : Array = possible_stone_moves(new_state, move.to, new_state.player)
-		if len(possible_moves) > 0 and is_capture(new_state, possible_moves[0]):
+		var possible_moves : Array = possible_stone_moves(new_state, move[to], new_state.player)
+		if moves_are_captures:
 			more_captures = true
-			new_state.forced_stone = move.to
+			new_state.forced_stone = move[to]
 
-	if not more_captures and type(new_state, move.to) == stone_type.man and crownhead(new_state.player, row(move.to)):
-		promote(new_state, move.to)
+	if not more_captures and type(new_state, move[to]) == stone_type.man and crownhead(new_state.player, row(move[to])):
+		promote(new_state, move[to])
 	
 	if more_captures:
 		new_state.player = old_state.player
@@ -204,6 +217,19 @@ func calculate_state_after(old_state : State, move : Move, make_copy : bool, che
 			new_state.winner = switch_color(new_state.player)
 	
 	return new_state
+
+func stone_between(state : State, move):
+	var stone = null
+	var direction = get_direction(move)
+	var fields_in_direction = diagonals[move[from]][direction]
+	var index : int = 0 # TODO jeśli dictionary to 1
+	var between : int = fields_in_direction[index]
+	while between != move[to]:
+		if state.board[between] != field.empty:
+			return between
+		index += 1
+		between = fields_in_direction[index]
+	return stone
 
 func revert(change : Change):
 	current_state = deep_copy(change.state_old)
@@ -241,41 +267,22 @@ func direction_to_number(direction) -> int:
 		offset = -1
 	return signum * (board_size + offset)
 
-func get_square(square_number : int, direction, distance) -> int:
-	return diagonals[square_number][direction][distance]
-
 func get_direction(move): # -> move_direction:
-	if (move.from == 0) and (move.to == board_size * board_size -1):
+	if (move[from] == 0):
 		return move_direction.NE
-	if row(move.from) < row(move.to):
-		if (move.to - move.from) % (board_size + 1) == 0:
+	if row(move[from]) < row(move[to]):
+		if (move[to] - move[from]) % (board_size + 1) == 0:
 			return move_direction.NE
 		else:
 			return move_direction.NW
 	else: # row(from) > row(to):
-		if (move.to - move.from) % (board_size + 1) == 0:
+		if (move[to] - move[from]) % (board_size + 1) == 0:
 			return move_direction.SW
 		else:
 			return move_direction.SE
 
-func get_distance(move):
-	if int(abs(move.from - move.to)) % (board_size + 1) == 0:
-		return int(abs(move.from - move.to)) / (board_size + 1)
-	elif int(abs(move.from - move.to)) % (board_size - 1) == 0:
-		return int(abs(move.from - move.to)) / (board_size - 1)
-
-func compatible_with_current_state(state, move : Move):
-	if not move.from in square_numbers or not move.to in square_numbers:
-		return false
-	var stone_field_from = state.board[move.from]
-	if stone_field_from == field.empty or state.board[move.to] != field.empty:
-		return false
-	if not field_color(stone_field_from) == state.player:
-		return false
-	return true
-
-func is_correct_move(state, move : Move):
-	if state.forced_stone != null and move.from != state.forced_stone:
+func is_correct_move(state, move):
+	if state.forced_stone != null and move[from] != state.forced_stone:
 		return false
 	if not compatible_with_current_state(state, move):
 		return false
@@ -283,13 +290,24 @@ func is_correct_move(state, move : Move):
 		return false
 	return true
 
-func contains_move(move : Move, moves : Array):
-	for possible_match in moves:
-		if possible_match.from == move.from and possible_match.to == move.to:
-			return true
-	return false
+func compatible_with_current_state(state, move):
+	if not move[from] in square_numbers or not move[to] in square_numbers:
+		return false
+	var stone_field_from = state.board[move[from]]
+	if stone_field_from == field.empty or state.board[move[to]] != field.empty:
+		return false
+	if not field_color(stone_field_from) == state.player:
+		return false
+	return true
 
-func random_move(state : State) -> Move:
+func contains_move(move, moves : Array):
+	return move in moves
+
+func random_move(state : State):
+	return random_move_good(state)
+#	return random_move_bad(state)
+
+func random_move_good(state : State):
 	if state.forced_stone != null:
 		var moves = possible_stone_moves(state, state.forced_stone, state.player)
 		return moves[randi() % len(moves)]
@@ -300,22 +318,30 @@ func random_move(state : State) -> Move:
 		else:
 			return moves[randi() % len(moves)]
 
-#func random_move(state : State) -> Move:
-#	var moves : Array
-#	if state.forced_stone != null:
-#		moves = possible_stone_moves(state, state.forced_stone, state.player)
-#	else:
-#		var stones = state.stone_squares[state.player].duplicate()
-#		while len(stones) > 0:
-#			var index = randi() % len(stones)
-#			moves = possible_stone_moves(state, stones[index], state.player)
-#			if moves_are_captures:
-#				return moves[randi() % len(moves)]
-#			else:
-#				stones.remove(index)
-#		if len(moves) == 0:
-#			return null
-#	return moves[randi() % len(moves)]
+func random_move_bad(state : State):
+	var moves : Array = []
+	if state.forced_stone != null:
+		moves = possible_stone_moves(state, state.forced_stone, state.player)
+		return moves[randi() % len(moves)]
+	else:
+		
+		var stones : Array = state.stone_squares[state.player].duplicate()
+		var stones_number : int = len(stones)
+		var stones_permutation : Array = []
+		for _i in stones_number:
+			var random_index : int = randi() % len(stones)
+			stones_permutation.append(stones[random_index])
+			stones.remove(random_index)
+		for stone in stones_permutation:
+			if len(moves) == 0:
+				moves = possible_stone_moves(state, stone, state.player)
+			if moves_are_captures:
+				return moves[randi() % len(moves)]
+		
+		if len(moves) == 0:
+			return null
+		else:
+			return moves[randi() % len(moves)]
 
 func possible_moves(state : State) -> Array:
 	if state.forced_stone != null:
@@ -338,71 +364,48 @@ func possible_moves(state : State) -> Array:
 var moves_are_captures : bool
 
 func possible_stone_moves(state : State, from : int, color : int) -> Array:
-	var moves : Array = []
+	var non_captures : Array = []
+	var captures : Array = []
 	var type = field_type(state.board[from])
 	if type == stone_type.man:
-		for fields_in_direction in diagonals[from]:
-			if len(fields_in_direction) > 1:
-				var to : int = fields_in_direction[1]
-				var between : int = fields_in_direction[0]
-				if state.board[to] == field.empty and state.board[between] != field.empty and color(state, between) == switch_color(color):
-					moves.append(Move.new(from, to))
-		if moves.empty():
-			moves_are_captures = false
-			for direction in man_directions[color]:
-				var fields_in_direction = diagonals[from][direction]
-				if not fields_in_direction.empty():
-					var to : int = fields_in_direction[0]
-					if state.board[to] == field.empty:
-						moves.append(Move.new(from, to))
-		else:
-			moves_are_captures = true
-	else: # if stone.type == stone_type.king:
-		var non_captures : Array = []
-		var captures : Array = []
 		for direction in all_directions:
+			var fields_in_direction = diagonals[from][direction]
+			var fields_number : int = len(fields_in_direction)
+			if fields_number > 0:
+				var one_away : int = fields_in_direction[0]
+				var field_one_away = state.board[one_away]
+				if field_one_away == field.empty:
+					if direction in man_directions[color]:
+						non_captures.append([from, one_away])
+				elif fields_number > 1:
+					var two_away : int = fields_in_direction[1]
+					var field_two_away = state.board[two_away]
+					if field_two_away == field.empty and field_color(field_one_away) != color:
+						captures.append([from, two_away])
+	else: # if stone.type == stone_type.king:
+		for direction in all_directions:
+			var enemy_stone_between : bool = false
 			for to in diagonals[from][direction]:
-				if state.board[to] == field.empty:
-					var new_move : Move = Move.new(from, to)
-					if get_distance(new_move) < 2:
-						non_captures.append(new_move)
+				var stone_field = state.board[to]
+				if stone_field == field.empty:
+					if enemy_stone_between:
+						captures.append([from, to])
 					else:
-						var between = stones_between(state, new_move)
-						if between != null:
-							if color(state, between) == switch_color(color(state, from)):
-								captures.append(new_move)
-						else:
-							non_captures.append(new_move)
-		if captures.empty():
-			moves_are_captures = false
-			moves = non_captures
-		else:
-			moves_are_captures = true
-			moves = captures
-	return moves
-
-func is_capture(state, move):
-	if get_distance(move) < 2:
-		return false
+						non_captures.append([from, to])
+				elif field_color(stone_field) != color:
+#					enemy_stone_between = true
+					if enemy_stone_between == false:
+						enemy_stone_between = true
+					else:
+						break
+				else:
+					break
+	if captures.empty():
+		moves_are_captures = false
+		return non_captures
 	else:
-		var between = stones_between(state, move)
-		return state.board[move.to] == field.empty and between != null and color(state, between) == switch_color(color(state, move.from))
-
-func stones_between(state : State, move : Move):
-	var stone = null
-	var direction = get_direction(move)
-	var fields_in_direction = diagonals[move.from][direction]
-	var index : int = 0 # TODO jeśli dictionary to 1
-	var between : int = fields_in_direction[index]
-	while between != move.to:
-		if state.board[between] != field.empty:
-			if stone == null:
-				stone = between
-			else:
-				return null
-		index += 1
-		between = fields_in_direction[index]
-	return stone
+		moves_are_captures = true
+		return captures
 
 func switch_color(color):
 	if color == stone_color.black:
@@ -412,7 +415,14 @@ func switch_color(color):
 
 func row(a):
 	return a / board_size
-	
+
+func same_state(state1 : State, state2 : State) -> bool:
+	# assumes the states are correct
+	return state1.board == state2.board # and state1.player == state2.player and state1.forced_stone == state2.forced_stone
+
+func count_stones(state : State) -> int:
+	return len(state.stone_squares[0] + state.stone_squares[1])
+
 func print_board(board : Array):
 	for i in range(8):
 		var string = ""

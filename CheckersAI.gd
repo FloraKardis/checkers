@@ -17,75 +17,102 @@ class MCTS_Node:
 		children = []
 
 
-var controller 
-var number_of_iterations = 5000
+var controller : Controller
+var max_number_of_iterations = 10000
 var ai_player = Controller.stone_color.white
 
 
-func _ready():
+func init(new_controller  : Controller):
 #	randomize()
-	pass
+	controller = new_controller
+	root = MCTS_Node.new(controller.current_state, null, controller)
 
-var thread
+var root
+var thread # TODO
 
-func propose_move() -> Controller.Move:
+func update_state(new_state):
+	for node in root.children:
+		if controller.same_state(node.state, new_state):
+			root = node
+			root.parent = null
+			return
+	root = MCTS_Node.new(new_state, null, controller)
+
+func propose_move():
 #	return propose_move_first()
 #	return propose_move_random()
 	return propose_move_mcts()
 
-func propose_move_first() -> Controller.Move:
+func propose_move_first():
 	return controller.possible_moves(controller.current_state)[0]
 
-func propose_move_random() -> Controller.Move:
+func propose_move_random():
 	return controller.random_move(controller.current_state)
 
-func propose_move_mcts() -> Controller.Move:
+func propose_move_mcts():
+#	var timer_big = OS.get_system_time_msecs()
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
-	var timer_big = OS.get_system_time_msecs()
-	var root : MCTS_Node = MCTS_Node.new(controller.current_state, null, controller)
 	if len(root.possible_moves) == 1:
-		print(OS.get_system_time_msecs() - timer_big)
 		return select_best(root)
-		
-	var a = 0
-	var b = 0
-	var c = 0
-	var d = 0
-	var timer
-		
-	for iteration in number_of_iterations:
-		timer = OS.get_system_time_msecs()
+	
+	
+#	var a = 0
+#	var b = 0
+#	var c = 0
+#	var d = 0
+#	var timer
+	
+	var number_of_iterations : int
+	var number_of_stones : int = controller.count_stones(root.state)
+	if number_of_stones == 24 and root.visits == 0: # Just the first move
+		number_of_iterations = int(max_number_of_iterations * 0.1) 
+	else:
+		if number_of_stones > 20:
+			number_of_iterations = int(max_number_of_iterations * 0.3)
+		elif number_of_stones > 16:
+			number_of_iterations = int(max_number_of_iterations * 0.4)
+		elif number_of_stones > 12:
+			number_of_iterations = int(max_number_of_iterations * 0.5)
+		elif number_of_stones > 10:
+			number_of_iterations = int(max_number_of_iterations * 0.6)
+		elif number_of_stones > 8:
+			number_of_iterations = int(max_number_of_iterations * 0.7)
+		else:
+			number_of_iterations = max_number_of_iterations
+	
+	while root.visits < number_of_iterations:
+#		timer = OS.get_system_time_msecs()
 		var selected_node : MCTS_Node = selection(root)
-		a += OS.get_system_time_msecs() - timer
-		timer = OS.get_system_time_msecs()
+#		a += OS.get_system_time_msecs() - timer
+#		timer = OS.get_system_time_msecs()
 		var expanded_node : MCTS_Node = expansion(selected_node)
-		b += OS.get_system_time_msecs() - timer
-		timer = OS.get_system_time_msecs()
+#		b += OS.get_system_time_msecs() - timer
+#		timer = OS.get_system_time_msecs()
 		var winner = simulation(expanded_node)
-		c += OS.get_system_time_msecs() - timer
-		timer = OS.get_system_time_msecs()
+#		c += OS.get_system_time_msecs() - timer
+#		timer = OS.get_system_time_msecs()
 		backpropagation(expanded_node, winner)
-		d += OS.get_system_time_msecs() - timer
+#		d += OS.get_system_time_msecs() - timer
 		
-	print("\n\n", a, "\n", b, "\n", c, "\n", d)
-	print(OS.get_system_time_msecs() - timer_big)
+#	for child in root.children:
+#		print(child.wins, "\t/\t", child.visits)
+	
+#	print("\n\n", a, "\n", b, "\n", c, "\n", d)
+#	print(number_of_stones, "\t/\t", number_of_iterations, "\t:\t", OS.get_system_time_msecs() - timer_big)
 	return select_best(root)
 
 func selection(root) -> MCTS_Node:
 	var current_node : MCTS_Node = root
 	while len(current_node.children) != 0 and len(current_node.children) == len(current_node.possible_moves):
-		current_node = select_child(current_node.children)
+		current_node = select_child(current_node.visits, current_node.children)
 	return current_node
 
-var c : float = sqrt(2)
+const c : float = sqrt(2)
 
-func select_child(children) -> MCTS_Node:
+func select_child(N, children) -> MCTS_Node:
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search#Exploration_and_exploitation
 	var highest_uct : float = -1.0
 	var best_child : MCTS_Node = null
-	var N : int = 0
-	for child in children:
-		N += child.visits
 	var ln_N : float = log(float(N))
 	for child in children:
 		var w : float = float(child.wins)
@@ -98,49 +125,84 @@ func select_child(children) -> MCTS_Node:
 
 func expansion(node) -> MCTS_Node:
 	if len(node.possible_moves) > 0:
-		var untested_move : Controller.Move = node.possible_moves[len(node.children)]
+		var untested_move = node.possible_moves[len(node.children)]
 		var new_state = controller.state_after(node.state, untested_move)
 		node.children.append(MCTS_Node.new(new_state, node, controller))
 		return node.children.back()
 	else:
 		return node
 
-var tie_limit : int = 0
+const simulation_limit : int = 100
+const tie_limit : int = 30
+
+var moves_until_tie
+var stones_lost_previous
 
 func simulation(node) -> bool:
 	var current_state : Controller.State = controller.deep_copy(node.state)
 	var counter : int = 0
 	
+	stones_lost_previous = [0, 0]
+	moves_until_tie = tie_limit
+	
 	var big_advantage = null
-	var random_move : Controller.Move = null
+	var random_move = null
 	if len(node.possible_moves) > 0:
 		random_move = node.possible_moves[randi() % len(node.possible_moves)]
-	while random_move != null and counter < tie_limit and big_advantage == null:
+	while random_move != null and not tie(node.state, current_state) and counter < simulation_limit and big_advantage == null:
 		counter += 1
 		current_state = controller.calculate_state_after(current_state, random_move, false, false)
 		random_move = controller.random_move(current_state)
 		big_advantage = big_advantage(node.state, current_state)
-	if counter == tie_limit:
+	if counter == simulation_limit or tie(node.state, current_state):
 		return [Controller.stone_color.black, Controller.stone_color.white][randi() % 2] # tie = coinflip
 	elif big_advantage != null:
 		return big_advantage
 	else:
 		return controller.switch_color(current_state.player)
 
+func tie(old_state : Controller.State, new_state : Controller.State):
+	return false
+	if stones_lost_previous != stones_lost(old_state, new_state):
+		moves_until_tie = tie_limit
+	else:
+		moves_until_tie -= 1
+	if moves_until_tie == 0:
+		return true
+	else:
+		return false
+
+var small_stones_difference = 2
 var big_stones_difference = 3
 
+func small_advantage(old_state : Controller.State, new_state : Controller.State):
+	var stones_lost = stones_lost(old_state, new_state)
+	var black_stones_lost : int = stones_lost[Controller.stone_color.black]
+	var white_stones_lost : int = stones_lost[Controller.stone_color.white]
+	if black_stones_lost + small_stones_difference <= white_stones_lost:
+		return Controller.stone_color.black
+	if white_stones_lost + small_stones_difference <= white_stones_lost:
+		return Controller.stone_color.white
+	return null
+
 func big_advantage(old_state : Controller.State, new_state : Controller.State):
+	var stones_lost = stones_lost(old_state, new_state)
+	var black_stones_lost : int = stones_lost[Controller.stone_color.black]
+	var white_stones_lost : int = stones_lost[Controller.stone_color.white]
+	if black_stones_lost + big_stones_difference <= white_stones_lost:
+		return Controller.stone_color.black
+	if white_stones_lost + big_stones_difference <= white_stones_lost:
+		return Controller.stone_color.white
+	return null
+
+func stones_lost(old_state : Controller.State, new_state : Controller.State) -> Array:
 	var black_stones_old : int = len(old_state.stone_squares[Controller.stone_color.black])
 	var white_stones_old : int = len(old_state.stone_squares[Controller.stone_color.white])
 	var black_stones_new : int = len(new_state.stone_squares[Controller.stone_color.black])
 	var white_stones_new : int = len(new_state.stone_squares[Controller.stone_color.white])
 	var black_stones_lost : int = black_stones_old - black_stones_new
 	var white_stones_lost : int = white_stones_old - white_stones_new
-	if black_stones_lost + big_stones_difference <= white_stones_lost:
-		return Controller.stone_color.black
-	if white_stones_lost + big_stones_difference <= white_stones_lost:
-		return Controller.stone_color.white
-	return null
+	return [black_stones_lost, white_stones_lost]
 
 func backpropagation(node : MCTS_Node, winner):
 	while node.parent != null:
@@ -148,11 +210,17 @@ func backpropagation(node : MCTS_Node, winner):
 		if winner == node.parent.state.player:
 			node.wins += 1
 		node = node.parent
+	node.visits += 1
 
-func select_best(root) -> Controller.Move: 
+func select_best(root): 
 	# TODO tu by można zrobić, że jeśli sytuacja jest beznadziejna, to remis
 	var best_index : int = 0
 	for child_index in len(root.children):
-		if root.children[child_index].visits > root.children[best_index].visits:
+		if root.children[child_index].wins > root.children[best_index].wins:
 			best_index = child_index
 	return controller.possible_moves(controller.current_state)[best_index]
+
+func print_node(node : MCTS_Node):
+	print("\n\nNODE:")
+	controller.print_board(node.state.board)
+	print(node.wins, " / ", node.visits)

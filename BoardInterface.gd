@@ -4,6 +4,10 @@ class_name BoardInterface
 
 const interface_users = [Controller.stone_color.black]
 
+# Move:
+var from
+var to
+
 var buttons : HistoryInterface
 var controller : Controller
 var ai : CheckersAI
@@ -14,6 +18,8 @@ func get_size() -> Vector2:
 	return get_node("Sprite").texture.get_size()
 
 func setup():
+	from = controller.from
+	to = controller.to
 	set_squares()
 	buttons = self.get_parent().buttons
 	pause = 0.5
@@ -94,18 +100,19 @@ var captured_stone : StoneInterface
 var promoted_stone : StoneInterface
 var winner = null # : Controller.stone_color
 
-func try_move(move : Controller.Move, stone_interface):
+func try_move(move, stone_interface):
 	if controller.is_correct_move(controller.current_state, move):
 		var change : Controller.Change = controller.make_move(move)
-		stone_interface.move_to(get_node("Square" + String(move.to)).position)
-		stone_interface.set_square(move.to)
+		ai.update_state(change.state_new)
+		stone_interface.move_to(get_node("Square" + String(move[to])).position)
+		stone_interface.set_square(move[to])
 		if change.captured != null:
 			captured_stone = find_stone(change.captured)
 		if change.promoted:
-			promoted_stone = find_stone(move.to)
+			promoted_stone = find_stone(move[to])
 		winner = change.winner
 	else:
-		stone_interface.move_to(get_node("Square" + String(move.from)).position)
+		stone_interface.move_to(get_node("Square" + String(move[from])).position)
 	user_color = null
 
 var reverted_change : Controller.Change = null
@@ -113,14 +120,14 @@ var redone_change : Controller.Change = null
 var moved_stone : StoneInterface = null
 
 func revert(change : Controller.Change):
-	moved_stone = find_stone(change.move.to)
+	moved_stone = find_stone(change.move[to])
 	controller.revert(change)
 	reverted_change = change
 	user_color = change.state_old.player
-	moved_stone.move_to(get_node("Square" + String(change.move.from)).position)
+	moved_stone.move_to(get_node("Square" + String(change.move[from])).position)
 
 func redo(change : Controller.Change):
-	moved_stone = find_stone(change.move.from)
+	moved_stone = find_stone(change.move[from])
 	controller.redo(change)
 	redone_change = change
 	user_color = change.state_new.player
@@ -128,7 +135,7 @@ func redo(change : Controller.Change):
 		captured_stone = find_stone(change.captured)
 	if change.promoted:
 		promoted_stone = moved_stone
-	moved_stone.move_to(get_node("Square" + String(change.move.to)).position)
+	moved_stone.move_to(get_node("Square" + String(change.move[to])).position)
 
 func find_stone(square_number : int): # this is ugly, but I can't be bothered
 	for stone in stones:
@@ -235,7 +242,7 @@ func _process(delta):
 				return
 			elif paused_function == pausable_functions.try_move and proposed_move != null:
 				paused_function = pausable_functions.none
-				try_move(proposed_move, find_stone(proposed_move.from))
+				try_move(proposed_move, find_stone(proposed_move[from]))
 				proposed_move = null
 			paused_function = pausable_functions.none
 

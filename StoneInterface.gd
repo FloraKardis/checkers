@@ -56,7 +56,7 @@ func is_pickable():
 func send_try_move():
 	picked_up = false
 	z_index = 0
-	board_interface.try_move(Controller.Move.new(square_number, square_to), self)
+	board_interface.try_move([square_number, square_to], self)
 
 # ANIMATION
 
