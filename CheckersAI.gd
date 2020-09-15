@@ -18,12 +18,14 @@ class MCTS_Node:
 
 
 var controller : Controller
+var difficulty : int
 var max_number_of_iterations = 10000
+var difficulty_factors : Array = [0.1, 0.3, 0.6, 1.0]
 var ai_player = Controller.stone_color.white
 
 
 func init(new_controller  : Controller):
-#	randomize()
+	randomize()
 	controller = new_controller
 	root = MCTS_Node.new(controller.current_state, null, controller)
 
@@ -38,6 +40,9 @@ func update_state(new_state):
 			return
 	root = MCTS_Node.new(new_state, null, controller)
 
+func set_difficulty(new_difficulty : int):
+	difficulty = new_difficulty
+
 func propose_move():
 #	return propose_move_first()
 #	return propose_move_random()
@@ -50,18 +55,21 @@ func propose_move_random():
 	return controller.random_move(controller.current_state)
 
 func propose_move_mcts():
-#	var timer_big = OS.get_system_time_msecs()
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
 	if len(root.possible_moves) == 1:
 		return select_best(root)
 	
+	var number_of_iterations = number_of_iterations()
 	
-#	var a = 0
-#	var b = 0
-#	var c = 0
-#	var d = 0
-#	var timer
+	while root.visits < number_of_iterations:
+		var selected_node : MCTS_Node = selection(root)
+		var expanded_node : MCTS_Node = expansion(selected_node)
+		var winner = simulation(expanded_node)
+		backpropagation(expanded_node, winner)
 	
+	return select_best(root)
+
+func number_of_iterations():
 	var number_of_iterations : int
 	var number_of_stones : int = controller.count_stones(root.state)
 	if number_of_stones == 24 and root.visits == 0: # Just the first move
@@ -79,27 +87,7 @@ func propose_move_mcts():
 			number_of_iterations = int(max_number_of_iterations * 0.7)
 		else:
 			number_of_iterations = max_number_of_iterations
-	
-	while root.visits < number_of_iterations:
-#		timer = OS.get_system_time_msecs()
-		var selected_node : MCTS_Node = selection(root)
-#		a += OS.get_system_time_msecs() - timer
-#		timer = OS.get_system_time_msecs()
-		var expanded_node : MCTS_Node = expansion(selected_node)
-#		b += OS.get_system_time_msecs() - timer
-#		timer = OS.get_system_time_msecs()
-		var winner = simulation(expanded_node)
-#		c += OS.get_system_time_msecs() - timer
-#		timer = OS.get_system_time_msecs()
-		backpropagation(expanded_node, winner)
-#		d += OS.get_system_time_msecs() - timer
-		
-#	for child in root.children:
-#		print(child.wins, "\t/\t", child.visits)
-	
-#	print("\n\n", a, "\n", b, "\n", c, "\n", d)
-#	print(number_of_stones, "\t/\t", number_of_iterations, "\t:\t", OS.get_system_time_msecs() - timer_big)
-	return select_best(root)
+	return number_of_iterations * difficulty_factors[difficulty - 1]
 
 func selection(root) -> MCTS_Node:
 	var current_node : MCTS_Node = root
@@ -213,7 +201,7 @@ func backpropagation(node : MCTS_Node, winner):
 	node.visits += 1
 
 func select_best(root): 
-	# TODO tu by można zrobić, że jeśli sytuacja jest beznadziejna, to remis
+	# TODO add tie/draw suggestion?
 	var best_index : int = 0
 	for child_index in len(root.children):
 		if root.children[child_index].wins > root.children[best_index].wins:

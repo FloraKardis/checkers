@@ -3,6 +3,7 @@ extends Area2D
 class_name StoneInterface
 
 onready var sprite : Sprite = get_node("Sprite")
+onready var focus : Sprite = get_node("Focus")
 var board_interface # : BoardInterface
 var square_number : int
 var restart : bool
@@ -11,6 +12,8 @@ var restart : bool
 func initialize(new_number, interface):
 	board_interface = interface
 	square_number = new_number
+	focus.visible = false
+	focus.z_index = 4
 	set_sprite()
 	position = board_interface.calculate_on_screen_position(square_number)
 	restart = false
@@ -46,8 +49,6 @@ func _input_event(viewport, event, shape_idx):
 					picked_up = true
 					z_index = 1
 					square_to = square_number
-				else:
-					send_try_move()
 
 func is_pickable():
 	var controller = board_interface.controller
@@ -60,12 +61,13 @@ func send_try_move():
 
 # ANIMATION
 
-enum animation_status { waiting_to_put, being_put, moving, being_captured, disappearing, appearing, none }
+enum animation_status { waiting_to_put, being_put, moving, being_captured, disappearing, appearing, focusing, none }
 enum type_change { promotion, demotion, none}
 
 var moving : bool = false
 var move_speed = 4000
 var capture_speed = 4
+var focus_speed = 2
 var target : Vector2
 var wait_time : float = -1
 var wait_factor : float = 50.0
@@ -85,6 +87,7 @@ func animate_capture():
 func animate_put(number : int):
 	scale = Vector2(0, 0)
 	set_sprite()
+	focus.visible = false
 	var order = board_interface.calculate_order(number)
 	status = animation_status.waiting_to_put
 	wait_time = order / wait_factor
@@ -96,6 +99,10 @@ func animate_promotion():
 func animate_demotion():
 	status = animation_status.disappearing
 	change = type_change.demotion
+
+func animate_focus():
+	status = animation_status.focusing
+	focus.visible = true
 
 func _process(delta):
 	if picked_up:
@@ -135,4 +142,11 @@ func _process(delta):
 				status = animation_status.none
 				change = type_change.none
 				board_interface.promotion_finished()
+	if status == animation_status.focusing:
+		focus.scale += Vector2(focus_speed, focus_speed) * delta
+		focus.set_modulate(Color(1, 1, 1, 2 - focus.scale.x))
+		if focus.scale.x > 2:
+			focus.scale = Vector2(2, 2)
+			status = animation_status.none
+			board_interface.focus_finished()
 

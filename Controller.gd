@@ -8,13 +8,6 @@ enum move_direction { NW, NE, SE, SW }
 
 enum field { empty, black_man, black_king, white_man, white_king }
 
-#class Move:
-#	var from
-#	var to
-#	func _init(f, t):
-#		from = f
-#		to = t
-
 class State:
 	var board
 	var stone_squares
@@ -78,7 +71,7 @@ func set_square_numbers():
 	# https://oeis.org/A225240
 	square_numbers.clear()
 	for number in range(1, board_size * board_size + 1):
-		if number % 2 + (1 - 2 * (number % 2)) * (number - 1) / board_size % 2:
+		if number % 2 + (1 - 2 * (number % 2)) * (number - 1) / board_size % 2 == 1:
 			square_numbers.append(number - 1)
 	diagonals = []
 	for index in board_size * board_size:
@@ -93,7 +86,7 @@ func set_square_numbers():
 					diagonals[square_number][direction].append(number)
 	colors = []
 	types = []
-	for i in range(5):
+	for _i in range(5):
 		colors.append(stone_color.white)
 		types.append(stone_type.man)
 	colors[field.black_man] = stone_color.black
@@ -124,12 +117,12 @@ func set_new_board_state():
 			current_state.board[square_number] = field.white_man
 			current_state.stone_squares[stone_color.white].append(square_number)
 
-	current_state.board[32] = field.black_man
-	current_state.stone_squares[stone_color.black].append(32)
-	current_state.board[25] = field.white_man
-	current_state.stone_squares[stone_color.white].append(25)
-	current_state.board[18] = field.empty
-	current_state.stone_squares[stone_color.black].erase(18)
+#	current_state.board[32] = field.black_man
+#	current_state.stone_squares[stone_color.black].append(32)
+#	current_state.board[25] = field.white_man
+#	current_state.stone_squares[stone_color.white].append(25)
+#	current_state.board[18] = field.empty
+#	current_state.stone_squares[stone_color.black].erase(18)
 
 	current_state.player = first_player
 
@@ -164,7 +157,7 @@ func make_move(move) -> Change:
 #		print("white stones:   ", current_state.stone_squares[stone_color.white])
 #		print("forced stone:   ", current_state.forced_stone)
 #		print("winner:         ", current_state.winner)
-		var moves = possible_moves(current_state)
+#		var moves = possible_moves(current_state)
 #		for _i in range(1000):
 #			var random_move = random_move(current_state)
 #			for possible_move in moves:
@@ -199,7 +192,7 @@ func calculate_state_after(old_state : State, move, make_copy : bool, check_win 
 	if between != null:
 		new_state.board[between] = field.empty
 		new_state.stone_squares[switch_color(new_state.player)].erase(between)
-		var possible_moves : Array = possible_stone_moves(new_state, move[to], new_state.player)
+		possible_stone_moves(new_state, move[to], new_state.player) # for moves_are_captures
 		if moves_are_captures:
 			more_captures = true
 			new_state.forced_stone = move[to]
@@ -357,8 +350,10 @@ func possible_moves(state : State) -> Array:
 			for move in stone_moves:
 				moves.append(move)
 	if captures.empty():
+		moves_are_captures = false
 		return moves
 	else:
+		moves_are_captures = true
 		return captures
 
 var moves_are_captures : bool
@@ -422,6 +417,14 @@ func same_state(state1 : State, state2 : State) -> bool:
 
 func count_stones(state : State) -> int:
 	return len(state.stone_squares[0] + state.stone_squares[1])
+
+func movable_stones() -> Array:
+	var movable_stones : Array = []
+	if moves_are_captures:
+		for move in possible_moves(current_state):
+			if not move[0] in movable_stones:
+				movable_stones.append(move[0])
+	return movable_stones
 
 func print_board(board : Array):
 	for i in range(8):

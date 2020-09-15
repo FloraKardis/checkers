@@ -14,8 +14,8 @@ var ai : CheckersAI
 var user_color
 var stones : Array = []
 
-func get_size() -> Vector2:
-	return get_node("Sprite").texture.get_size()
+func get_size() -> float:
+	return get_node("Sprite").texture.get_size().x
 
 func setup():
 	from = controller.from
@@ -101,6 +101,7 @@ var promoted_stone : StoneInterface
 var winner = null # : Controller.stone_color
 
 func try_move(move, stone_interface):
+#	animations_waiting = 0
 	if controller.is_correct_move(controller.current_state, move):
 		var change : Controller.Change = controller.make_move(move)
 		ai.update_state(change.state_new)
@@ -112,7 +113,14 @@ func try_move(move, stone_interface):
 			promoted_stone = find_stone(move[to])
 		winner = change.winner
 	else:
+		animations_waiting = 1
 		stone_interface.move_to(get_node("Square" + String(move[from])).position)
+		var movable_stones = controller.movable_stones()
+		for square_number in controller.movable_stones():
+			if square_number != move[from]:
+				animations_waiting += 1
+				find_stone(square_number).animate_focus()
+	
 	user_color = null
 
 var reverted_change : Controller.Change = null
@@ -146,6 +154,13 @@ var game_over : bool = false
 
 # ANIMATION
 
+var animations_waiting : int = 0
+
+func focus_finished():
+	animations_waiting -= 1
+	if animations_waiting == 0:
+		reset()
+
 func move_finished():
 	if not game_over:
 		if reverted_change == null:
@@ -172,7 +187,9 @@ func capture_finished():
 				if winner != null:
 					clear_screen()
 				else:
-					reset()
+					animations_waiting -= 1
+					if animations_waiting <= 0:
+						reset()
 		else:
 			if reverted_change.promoted:
 				moved_stone.animate_demotion()

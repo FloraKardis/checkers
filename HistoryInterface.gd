@@ -13,7 +13,7 @@ var board_interface # : BoardInterface
 func _ready():
 	undo_button.initialize(self)
 	redo_button.initialize(self)
-	var button_width : float = get_size().x
+	var button_width : float = get_size()
 	var half_distance : float = distance_apart / 2
 	undo_button.position.x = -button_width - button_width * half_distance
 	redo_button.flip()
@@ -21,8 +21,8 @@ func _ready():
 	undo_button_default_position = undo_button.position
 	redo_button_default_position = redo_button.position
 
-func get_size() -> Vector2:
-	return get_node("Undo").get_node("Sprite").texture.get_size()
+func get_size() -> float:
+	return get_node("Undo").get_node("Sprite").texture.get_size().x
 
 func clicked():
 	if undo_button.clicked:
@@ -72,7 +72,7 @@ func _process(delta):
 		var shift: float = undo_button.get_node("CollisionShape2D").position.x
 		if undo_button.position.x >= 0:
 			undo_button.position.x = shift/4
-			redo_button.position.x = -undo_button.position.x - get_size().x
+			redo_button.position.x = -undo_button.position.x - get_size()
 			status = animation_status.none
 	if status == animation_status.unlocking:
 		undo_button.position.x -= locking_speed * delta
