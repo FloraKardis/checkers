@@ -19,8 +19,8 @@ class MCTS_Node:
 
 var controller : Controller
 var difficulty : int
-var max_number_of_iterations = 10000
-var difficulty_factors : Array = [0.1, 0.3, 0.6, 1.0]
+var max_number_of_iterations = 5000
+var difficulty_factors : Array = [0.01, 0.08, 0.4, 1.0]
 var ai_player = Controller.stone_color.white
 
 
@@ -30,7 +30,6 @@ func init(new_controller  : Controller):
 	root = MCTS_Node.new(controller.current_state, null, controller)
 
 var root
-var thread # TODO
 
 func update_state(new_state):
 	for node in root.children:
@@ -44,17 +43,6 @@ func set_difficulty(new_difficulty : int):
 	difficulty = new_difficulty
 
 func propose_move():
-#	return propose_move_first()
-#	return propose_move_random()
-	return propose_move_mcts()
-
-func propose_move_first():
-	return controller.possible_moves(controller.current_state)[0]
-
-func propose_move_random():
-	return controller.random_move(controller.current_state)
-
-func propose_move_mcts():
 	# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
 	if len(root.possible_moves) == 1:
 		return select_best(root)
@@ -76,15 +64,15 @@ func number_of_iterations():
 		number_of_iterations = int(max_number_of_iterations * 0.1) 
 	else:
 		if number_of_stones > 20:
-			number_of_iterations = int(max_number_of_iterations * 0.3)
-		elif number_of_stones > 16:
-			number_of_iterations = int(max_number_of_iterations * 0.4)
-		elif number_of_stones > 12:
 			number_of_iterations = int(max_number_of_iterations * 0.5)
-		elif number_of_stones > 10:
+		elif number_of_stones > 16:
 			number_of_iterations = int(max_number_of_iterations * 0.6)
-		elif number_of_stones > 8:
+		elif number_of_stones > 12:
 			number_of_iterations = int(max_number_of_iterations * 0.7)
+		elif number_of_stones > 10:
+			number_of_iterations = int(max_number_of_iterations * 0.8)
+		elif number_of_stones > 8:
+			number_of_iterations = int(max_number_of_iterations * 0.9)
 		else:
 			number_of_iterations = max_number_of_iterations
 	return number_of_iterations * difficulty_factors[difficulty - 1]
@@ -155,10 +143,7 @@ func tie(old_state : Controller.State, new_state : Controller.State):
 		moves_until_tie = tie_limit
 	else:
 		moves_until_tie -= 1
-	if moves_until_tie == 0:
-		return true
-	else:
-		return false
+	return (moves_until_tie == 0)
 
 var small_stones_difference = 2
 var big_stones_difference = 3
@@ -207,8 +192,3 @@ func select_best(root):
 		if root.children[child_index].wins > root.children[best_index].wins:
 			best_index = child_index
 	return controller.possible_moves(controller.current_state)[best_index]
-
-func print_node(node : MCTS_Node):
-	print("\n\nNODE:")
-	controller.print_board(node.state.board)
-	print(node.wins, " / ", node.visits)
